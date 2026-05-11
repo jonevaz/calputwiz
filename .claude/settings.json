@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/jone.vaz/Development/calputwiz && git add -A && (git diff --cached --quiet || (git commit -m \"chore: auto-sync changes\" && git push origin main)) 2>/dev/null || true",
+            "statusMessage": "Sincronizando com GitHub..."
+          }
+        ]
+      }
+    ]
+  }
+}
