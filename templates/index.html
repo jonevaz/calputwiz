@@ -285,16 +285,49 @@
   }
 
   function requestNotifPermission() {
-    Notification.requestPermission().then((perm) => {
-      if (perm === "granted") {
-        document.getElementById("notif-bar").classList.remove("show");
-      }
+    if (!("Notification" in window)) {
+      updateNotifBar("Seu browser não suporta notificações.", false);
+      return;
+    }
+    if (Notification.permission === "granted") {
+      document.getElementById("notif-bar").classList.remove("show");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      updateNotifBar("Notificações bloqueadas. Desbloqueie manualmente nas configurações do browser (ícone 🔒 na barra de endereço).", false);
+      return;
+    }
+
+    // Suporta API callback (Safari legado) e Promise (Chrome/Firefox)
+    const result = Notification.requestPermission(function(perm) {
+      handlePermResult(perm);
     });
+    if (result && typeof result.then === "function") {
+      result.then(handlePermResult);
+    }
   }
 
-  // Show notification permission bar if not yet decided
-  if ("Notification" in window && Notification.permission === "default") {
+  function handlePermResult(perm) {
+    if (perm === "granted") {
+      document.getElementById("notif-bar").classList.remove("show");
+      new Notification("CalputWiz", { body: "Notificações ativadas! Você receberá alertas de sinais aqui." });
+    } else {
+      updateNotifBar("Permissão negada. Para ativar, clique em 🔒 na barra de endereço e permita notificações.", false);
+    }
+  }
+
+  function updateNotifBar(msg, showButton) {
+    const bar = document.getElementById("notif-bar");
+    bar.querySelector("span").textContent = msg;
+    bar.querySelector("button").style.display = showButton ? "" : "none";
+  }
+
+  // Mostra a barra se a permissão ainda não foi decidida ou foi negada
+  if ("Notification" in window && Notification.permission !== "granted") {
     document.getElementById("notif-bar").classList.add("show");
+    if (Notification.permission === "denied") {
+      updateNotifBar("Notificações bloqueadas. Desbloqueie em 🔒 na barra de endereço para receber alertas.", false);
+    }
   }
 </script>
 </body>
