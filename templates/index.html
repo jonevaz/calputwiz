@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CalputWiz — Monitor de Opções B3</title>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0d1117;
+      color: #e6edf3;
+      min-height: 100vh;
+    }
+
+    header {
+      background: #161b22;
+      border-bottom: 1px solid #30363d;
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    header h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: 0.5px; }
+    header span { font-size: 0.8rem; color: #8b949e; }
+
+    #status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: #3d444d;
+      margin-left: auto;
+      transition: background 0.3s;
+    }
+    #status-dot.connected { background: #3fb950; box-shadow: 0 0 6px #3fb950; }
+    #status-dot.scanning  { background: #d29922; box-shadow: 0 0 6px #d29922; }
+
+    #status-label { font-size: 0.75rem; color: #8b949e; }
+
+    main { padding: 24px 32px; }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      background: #21262d;
+      color: #e6edf3;
+      border: 1px solid #30363d;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: background 0.2s;
+    }
+    button:hover { background: #30363d; }
+    button.primary { background: #238636; border-color: #2ea043; }
+    button.primary:hover { background: #2ea043; }
+
+    #signal-count {
+      font-size: 0.8rem;
+      color: #8b949e;
+      margin-left: auto;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    thead th {
+      background: #161b22;
+      padding: 12px 16px;
+      text-align: left;
+      font-weight: 600;
+      color: #8b949e;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #30363d;
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid #21262d;
+      animation: fadeIn 0.4s ease;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #161b22; }
+
+    tbody td { padding: 12px 16px; white-space: nowrap; }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .badge.call { background: rgba(46,160,67,.15); color: #3fb950; border: 1px solid rgba(46,160,67,.4); }
+    .badge.put  { background: rgba(248,81,73,.15);  color: #f85149; border: 1px solid rgba(248,81,73,.4); }
+
+    .ticker-cell { font-weight: 700; font-size: 0.95rem; }
+
+    .price { font-family: 'Courier New', monospace; }
+
+    .flash-call { background: rgba(46,160,67,.06); }
+    .flash-put  { background: rgba(248,81,73,.06); }
+
+    #empty-state {
+      text-align: center;
+      padding: 60px 0;
+      color: #8b949e;
+      font-size: 0.9rem;
+    }
+    #empty-state p { margin-top: 8px; font-size: 0.8rem; color: #3d444d; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .notif-bar {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      font-size: 0.8rem;
+      color: #8b949e;
+      display: none;
+      align-items: center;
+      gap: 8px;
+    }
+    .notif-bar.show { display: flex; }
+    .notif-bar button { padding: 4px 10px; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>CalputWiz</h1>
+  <span>Monitor de Opções · B3 IBOVESPA</span>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+    <span id="status-label">Desconectado</span>
+    <div id="status-dot"></div>
+  </div>
+</header>
+
+<main>
+  <div id="notif-bar" class="notif-bar">
+    <span>Ative as notificações do browser para receber alertas mesmo com a aba em segundo plano.</span>
+    <button onclick="requestNotifPermission()">Ativar</button>
+    <button onclick="document.getElementById('notif-bar').classList.remove('show')">Dispensar</button>
+  </div>
+
+  <div class="toolbar">
+    <button class="primary" onclick="triggerScan()">▶ Varredura Manual</button>
+    <button onclick="clearTable()">Limpar</button>
+    <span id="signal-count">0 sinais</span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Operação</th>
+          <th>Preço Atual</th>
+          <th>Strike Sugerido</th>
+          <th>Prêmio Est.</th>
+          <th>Vencimento</th>
+          <th>Volatilidade</th>
+          <th>Horário</th>
+        </tr>
+      </thead>
+      <tbody id="signals-body">
+        <tr id="empty-row">
+          <td colspan="8">
+            <div id="empty-state">
+              Nenhum sinal ainda
+              <p>Clique em "Varredura Manual" para escanear agora, ou aguarde o próximo ciclo automático (pregão, a cada 5min).</p>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
+
+<script>
+  const socket = io();
+  let signalCount = 0;
+
+  socket.on("connect", () => {
+    document.getElementById("status-dot").className = "connected";
+    document.getElementById("status-label").textContent = "Conectado";
+  });
+
+  socket.on("disconnect", () => {
+    document.getElementById("status-dot").className = "";
+    document.getElementById("status-label").textContent = "Desconectado";
+  });
+
+  socket.on("new_signal", (data) => {
+    addSignalRow(data);
+    sendBrowserNotification(data);
+  });
+
+  function fmt(n) {
+    return Number(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function addSignalRow(d) {
+    const tbody = document.getElementById("signals-body");
+    const emptyRow = document.getElementById("empty-row");
+    if (emptyRow) emptyRow.remove();
+
+    const tr = document.createElement("tr");
+    const isCall = d.type === "CALL";
+    tr.className = isCall ? "flash-call" : "flash-put";
+
+    tr.innerHTML = `
+      <td class="ticker-cell">${d.ticker}</td>
+      <td><span class="badge ${d.type.toLowerCase()}">${d.type}</span></td>
+      <td class="price">${fmt(d.current_price)}</td>
+      <td class="price">${fmt(d.strike)}</td>
+      <td class="price">${fmt(d.premium)}</td>
+      <td>${d.expiry}</td>
+      <td>${d.volatility}%</td>
+      <td>${d.timestamp}</td>
+    `;
+
+    tbody.insertBefore(tr, tbody.firstChild);
+    signalCount++;
+    document.getElementById("signal-count").textContent = `${signalCount} sinal${signalCount !== 1 ? "is" : ""}`;
+  }
+
+  function clearTable() {
+    const tbody = document.getElementById("signals-body");
+    tbody.innerHTML = `<tr id="empty-row"><td colspan="8"><div id="empty-state">Nenhum sinal ainda<p>Clique em "Varredura Manual" para escanear agora.</p></div></td></tr>`;
+    signalCount = 0;
+    document.getElementById("signal-count").textContent = "0 sinais";
+  }
+
+  async function triggerScan() {
+    const dot = document.getElementById("status-dot");
+    const label = document.getElementById("status-label");
+    dot.className = "scanning";
+    label.textContent = "Varrendo...";
+    try {
+      await fetch("/scan");
+    } finally {
+      setTimeout(() => {
+        if (socket.connected) {
+          dot.className = "connected";
+          label.textContent = "Conectado";
+        }
+      }, 2000);
+    }
+  }
+
+  function sendBrowserNotification(d) {
+    if (Notification.permission !== "granted") return;
+    const emoji = d.type === "CALL" ? "📈" : "📉";
+    const n = new Notification(`${emoji} [${d.type}] ${d.ticker}`, {
+      body: `Strike ${fmt(d.strike)} | Prêmio ~${fmt(d.premium)} | Vcto ${d.expiry}`,
+      icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>${d.type === 'CALL' ? '📈' : '📉'}</text></svg>",
+      tag: `calputwiz-${d.ticker}-${d.type}`,
+    });
+    setTimeout(() => n.close(), 8000);
+  }
+
+  function requestNotifPermission() {
+    Notification.requestPermission().then((perm) => {
+      if (perm === "granted") {
+        document.getElementById("notif-bar").classList.remove("show");
+      }
+    });
+  }
+
+  // Show notification permission bar if not yet decided
+  if ("Notification" in window && Notification.permission === "default") {
+    document.getElementById("notif-bar").classList.add("show");
+  }
+</script>
+</body>
+</html>

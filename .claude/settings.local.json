@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pkill -f \"python3 app.py\")",
+      "Bash(python3 /Users/jone.vaz/Development/calputwiz/app.py)",
+      "Bash(curl -s http://localhost:5001/)",
+      "Bash(curl -s http://localhost:5001/scan)"
+    ]
+  }
+}
